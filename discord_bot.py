@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 import json
 import discord
 from discord.ext import commands
@@ -18,6 +19,60 @@ class MyClient(commands.Bot):
     @staticmethod
     async def on_ready():
         print("Le bot est prêt")
+
+    async def on_command(self, ctx):
+
+        # Recuperation d'info ( user id, info du fichier JSON ) ainsi que la commande utilisee.
+        author_id = str(ctx.author.id)
+        users = await self.open_file("player_account", "r", None)
+        command = ctx.command
+
+        if str(command) == "beg":
+
+            """
+                Si la commande BEG est utilise, on verifie que le joueur peut mendier
+                ( si il ne l'a pas deja fait dans l'heure qui vient de passer )
+            """
+            if await self.can_user_beg(author_id, users):
+                print("OK")
+                sleeping_time = 3600
+                users[author_id]["has_beg"] = True
+
+                while sleeping_time:
+                    await asyncio.sleep(1)
+                    sleeping_time -= 1
+                    users[author_id]["time_left"] = sleeping_time
+                    await self.open_file("player_account", "w", users)
+
+                users[author_id]["has_beg"] = False
+                await self.open_file("player_account", "w", users)
+            else:
+                print("PAS OK")
+                sleeping_time = int(users[author_id]["time_left"])
+
+                while sleeping_time:
+                    await asyncio.sleep(1)
+                    sleeping_time -= 1
+                    users[author_id]["time_left"] = sleeping_time
+                    await self.open_file("player_account", "w", users)
+
+                users[author_id]["has_beg"] = False
+                await self.open_file("player_account", "w", users)
+                return True
+
+    @staticmethod
+    async def can_user_beg(author_id, users):
+
+        # On verifie grace a un boolean stocke dans le fichier JSON si le jour a deja utiliser la commande ou non
+
+        if author_id in users:
+            if users[author_id]["has_beg"] is False:
+                return True
+            else:
+                print("Retour false")
+                return False
+        else:
+            return False
 
     @staticmethod
     async def open_file(name_file, opening_mode, users):
@@ -39,7 +94,7 @@ class MyClient(commands.Bot):
         elif opening_mode == "w":
 
             with open(str(name_file)+".json", str(opening_mode))as f:
-                json.dump(users, f)
+                json.dump(users, f, indent=4)
             f.close()
 
             return True
@@ -94,6 +149,7 @@ class MyClient(commands.Bot):
             pass
         else:
             users[str(user_id)] = {}
+            users[str(user_id)]["has_beg"] = False
             users[str(user_id)]["safe_deposit_box"] = 0
 
         await self.open_file(file_name, "w", users)
@@ -307,15 +363,22 @@ class MyClient(commands.Bot):
             """
 
             gain = random.randrange(101)
+            author_id = str(ctx.author.id)
 
             # Recuperation des donnes du fichier JSON
             users = await self.open_file("player_account", "r", None)
 
-            users[str(ctx.author.id)]["safe_deposit_box"] += gain  # Ajout du gain sur le compte du joueur
+            if await self.can_user_beg(author_id, users):
 
-            await self.open_file("player_account", "w", users)
+                users[str(ctx.author.id)]["safe_deposit_box"] += gain  # Ajout du gain sur le compte du joueur
 
-            await ctx.send(f"Someone gave you {gain} $")
+                await self.open_file("player_account", "w", users)
+
+                await ctx.send(f"Someone gave you {gain} $")
+
+            else:
+                await ctx.send("You cannot use this command. You must wait 1 hour before you can use it again")
+                return False
 
         @self.command(name="balance")
         async def balance(ctx):
