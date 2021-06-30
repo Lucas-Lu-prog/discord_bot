@@ -20,18 +20,32 @@ class MyClient(commands.Bot):
         print("Le bot est prêt")
 
     @staticmethod
-    async def get_bank_info():
+    async def open_file(name_file, opening_mode, users):
 
         """
-            Permet des donnes contenues dans le fichier JSON.
+            Permet d'ouvrir le fichier JSON pour lire ou ecrire dans celui-ci
         """
 
-        # Ouverture du fichier JSON en lecture
-        with open("main_bank.json", "r") as f:
-            users = json.load(f)
-        f.close()
+        if opening_mode == "r":
 
-        return users
+            # Ouverture du fichier JSON en lecture
+            with open(str(name_file)+".json", str(opening_mode)) as f:
+                users = json.load(f)
+
+            f.close()
+
+            return users
+
+        elif opening_mode == "w":
+
+            with open(str(name_file)+".json", str(opening_mode))as f:
+                json.dump(users, f)
+            f.close()
+
+            return True
+
+        else:
+            return False
 
     @staticmethod
     async def does_user_has_account(user_id, users):
@@ -61,19 +75,6 @@ class MyClient(commands.Bot):
         else:
             return False
 
-    @staticmethod
-    async def save_bank_info(users):
-
-        """
-            Permet l'ecriture des donnees finales dans le Fichier JSON
-        """
-
-        # Ouverture du fichier JSON en mode ecriture
-        with open("main_bank.json", "w") as f:
-            json.dump(users, f, indent=4)
-
-        f.close()
-
     async def open_account(self, user):
 
         """
@@ -82,7 +83,9 @@ class MyClient(commands.Bot):
             Renvoie un BOOLEAN
         """
 
-        users = await self.get_bank_info()
+        file_name = "player_account"
+
+        users = await self.open_file(file_name, "r", None)
 
         user_id = user.id
 
@@ -93,7 +96,7 @@ class MyClient(commands.Bot):
             users[str(user_id)] = {}
             users[str(user_id)]["safe_deposit_box"] = 0
 
-        await self.save_bank_info(users)
+        await self.open_file(file_name, "w", users)
         return True
 
     async def validation_check_mark(self, ctx, message):
@@ -151,11 +154,11 @@ class MyClient(commands.Bot):
         try:
             answer = await self.wait_for("message", timeout=20, check=check_message)
         except:
-            await ctx.send("Vous avez mis trop de temps. La roulette tourne deja.")
+            await ctx.send("You took too long. The roulette wheel is already spinning.")
             return False
 
         answer_content = int(answer.content)
-        users = await self.get_bank_info()
+        users = await self.open_file("player_account", "r", None)
 
         if (await self.check_safe_deposit_amount(ctx, ctx.author.id, users, answer_content)) or \
                 (0 >= answer_content or answer_content <= 37):
@@ -183,11 +186,11 @@ class MyClient(commands.Bot):
                            "If the ball lands on this number you win your bet x1.5. If you choose"
                            "the 0 and you win, you win your bet x4.")
 
-            await ctx.send("Choisissez une somme a miser : ")
+            await ctx.send("Choose an amount to bet:")
 
             # Permet la verification de la reponse du joueur ( si son compte possede assez de sous etc )
             player_bet = await self.check_user_answer(ctx)
-            users = await self.get_bank_info()
+            users = await self.open_file("player_account", "r", None)
 
             # Verifie si les bons check mark ont ete enclenche ( renvoie true ou false )
             if await self.validation_check_mark(ctx, "Do you want to validate your bet ?"):
@@ -215,7 +218,7 @@ class MyClient(commands.Bot):
 
                         users[str(ctx.author.id)]["safe_deposit_box"] += player_bet_final
 
-                        await self.save_bank_info(users)
+                        await self.open_file("player_account", "w", users)
 
                         em = discord.Embed(title="Roulette Magic", color=discord.Colour.random())
                         em.add_field(name="The ball stops on the square : ", value=str(random_number), inline=False)
@@ -231,7 +234,7 @@ class MyClient(commands.Bot):
 
                         await ctx.send(embed=em)
 
-                        await self.save_bank_info(users)
+                        await self.open_file("player_account", "w", users)
                         return False
                 else:
                     await ctx.send("Vous n'avez pas la somme mise. Vous partez de la table.")
@@ -251,7 +254,7 @@ class MyClient(commands.Bot):
 
             author_id = ctx.author.id
 
-            users = await self.get_bank_info()
+            users = await self.open_file("player_account", "r", None)
 
             # On verifie si l'autheur de la commande possede un compte
             if await self.does_user_has_account(author_id, users):
@@ -278,7 +281,7 @@ class MyClient(commands.Bot):
                     # Ajout des sous sur le compte cible
                     users[str(target_user.id)]["safe_deposit_box"] += int(donate_amount)
 
-                    await self.save_bank_info(users)
+                    await self.open_file("player_account", "w", users)
 
                     em = discord.Embed(title="Donate order", colour=discord.Colour.random())
                     em.add_field(name="Donation information", value=f"The donation of {donate_amount} $ "
@@ -306,11 +309,11 @@ class MyClient(commands.Bot):
             gain = random.randrange(101)
 
             # Recuperation des donnes du fichier JSON
-            users = await self.get_bank_info()
+            users = await self.open_file("player_account", "r", None)
 
             users[str(ctx.author.id)]["safe_deposit_box"] += gain  # Ajout du gain sur le compte du joueur
 
-            await self.save_bank_info(users)
+            await self.open_file("player_account", "w", users)
 
             await ctx.send(f"Someone gave you {gain} $")
 
@@ -323,7 +326,7 @@ class MyClient(commands.Bot):
 
             await self.open_account(ctx.author)
 
-            users = await self.get_bank_info()
+            users = await self.open_file("player_account", "r", None)
 
             u_safe_deposit_amount = users[str(ctx.author.id)]["safe_deposit_box"]
 
